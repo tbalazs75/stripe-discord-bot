@@ -54,4 +54,26 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   });
 
   if (userCustomer) {
-    await Postgres.
+    await Postgres.getRepository(DiscordCustomer).update(userCustomer.id, {
+      adminAccessEnabled: subCommand === "enable",
+    });
+  } else {
+    await Postgres.getRepository(DiscordCustomer).insert({
+      discordUserId: user.id,
+      adminAccessEnabled: subCommand === "enable",
+    });
+  }
+
+  const member = interaction.guild?.members.cache.get(user.id);
+  const roleId = process.env.ADMIN_ROLE_ID!;
+
+  if (subCommand === "enable") {
+    if (member) await member.roles.add(roleId);
+  } else {
+    if (member) await member.roles.remove(roleId);
+  }
+
+  return void interaction.followUp(
+    successEmbed(`Successfully ${subCommand === "enable" ? "enabled" : "disabled"} access for ${user.tag}.`)
+  );
+};
