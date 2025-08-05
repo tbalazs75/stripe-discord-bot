@@ -1,10 +1,12 @@
-import { MessageCommandRunFunction } from "../handlers/commands";
-import { TextChannel } from "discord.js";
+import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 
-export const commands = ['ping'];
+export const commands = [
+    new SlashCommandBuilder()
+        .setName("ping")
+        .setDescription("Get the bot's latency")
+        .toJSON()
+];
 
-export const run: MessageCommandRunFunction = async (message) => {
-    if (message.channel && message.channel.isTextBased) {
-        message.channel.send(`🏓 Pong! My latency is currently \`${message.client.ws.ping}ms\`.`);
-    }
-}
+export const run = async (interaction: ChatInputCommandInteraction) => {
+    await interaction.reply(`🏓 Pong! My latency is currently \`${interaction.client.ws.ping}ms\`.`);
+};
