@@ -118,7 +118,11 @@ export const run: SlashCommandRunFunction = async (interaction) => {
     const member = await interaction.guild?.members.fetch(interaction.user.id)?.catch(() => {});
     await (member as GuildMember)?.roles.add(process.env.PAYING_ROLE_ID);
 
-    (member?.guild.channels.cache.get(process.env.LOGS_CHANNEL_ID) as TextChannel).send(`:arrow_upper_right: **${member?.user?.tag || 'Unknown#0000'}** (${customer.discordUserId}, <@${customer.discordUserId}>) has been linked to \`${customer.email}\`.`);
+    const logChannel = member?.guild.channels.cache.get(process.env.LOGS_CHANNEL_ID!);
+if (logChannel && logChannel.isTextBased()) {
+  logChannel.send(`:arrow_upper_right: **${member?.user?.tag || 'Unknown#0000'}** (${customer.discordUserId}, <@${customer.discordUserId}>) has been linked to \`${customer.email}\`.`);
+}
+
 
     return void interaction.reply({
         ephemeral: true,
