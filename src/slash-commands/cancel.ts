@@ -3,6 +3,7 @@ import { errorEmbed, successEmbed } from "../util";
 import { Postgres, DiscordCustomer } from "../database";
 import { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonInteraction, ButtonStyle, EmbedBuilder, PermissionsBitField } from "discord.js";
 import { cancelSubscription, findActiveSubscriptions, findSubscriptionsFromCustomerId, getCustomerPayments, getLifetimePaymentDate, resolveCustomerIdFromEmail } from "../integrations/stripe";
+import { TextChannel } from "discord.js";
 
 export const commands = [
     {
@@ -90,44 +91,40 @@ export const run: SlashCommandRunFunction = async (interaction) => {
         components
     });
 
-    const collector = interaction.channel!.createMessageComponentCollector({
-        filter: (i) => (i as ButtonInteraction)?.customId === `cancel-confirm-${user.id}-${random3DigitsId}`,
-        time: 1000 * 60 * 5
-    });
+if (interaction.channel && interaction.channel instanceof TextChannel) {
+  const collector = interaction.channel.createMessageComponentCollector({
+    filter: (i) => (i as ButtonInteraction)?.customId === `cancel-confirm-${user.id}-${random3DigitsId}`,
+    time: 1000 * 60 * 5
+  });
 
-    collector.on('collect', (_i) => {
+  collector.on('collect', (_i) => {
+    const i = _i as ButtonInteraction;
 
-        const i = _i as ButtonInteraction;
+    if (i.isButton()) {
+      if (i.customId === `cancel-confirm-${user.id}-${random3DigitsId}`) {
+        const embed = new EmbedBuilder()
+          .setAuthor({
+            name: `${user.tag} cancellation`,
+            iconURL: user.displayAvatarURL()
+          })
+          .setDescription(`We're sorry to see you go! Your subscription has been cancelled.`)
+          .setColor(process.env.EMBED_COLOR);
 
-        if (i.isButton()) {
-
-            if (i.customId === `cancel-confirm-${user.id}-${random3DigitsId}`) {
-                const embed = new EmbedBuilder()
-                .setAuthor({
-                    name: `${user.tag} cancellation`,
-                    iconURL: user.displayAvatarURL()
-                })
-                .setDescription(`We're sorry to see you go! Your subscription has been cancelled.`)
-                .setColor(process.env.EMBED_COLOR);
-
-                i.reply({
-                    ephemeral: true,
-                    embeds: [embed],
-                    components: []
-                });
-
-                cancelSubscription(cancelled.id);
-            }
-
-        }
-
-    });
-
-    collector.on('end', () => {
-        interaction.editReply({
-            embeds: [confirmEmbed],
-            components: []
+        i.reply({
+          ephemeral: true,
+          embeds: [embed],
+          components: []
         });
-    });
 
+        cancelSubscription(cancelled.id);
+      }
+    }
+  });
+
+  collector.on('end', () => {
+    interaction.editReply({
+      embeds: [confirmEmbed],
+      components: []
+    });
+  });
 }
