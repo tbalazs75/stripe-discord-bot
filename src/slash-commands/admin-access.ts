@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, PermissionsBitField } from "discord.js";
+import { ChatInputCommandInteraction, PermissionsBitField, ApplicationCommandOptionType } from "discord.js";
 import { errorEmbed, successEmbed } from "../util";
 import { Postgres, DiscordCustomer } from "../database";
 
@@ -10,35 +10,35 @@ export const commands = [
       {
         name: "enable",
         description: "Enable access for the user",
-        type: 1, // Subcommand
+        type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: "user",
             description: "The user you want to give access to",
-            type: 6, // User
-            required: true
-          }
-        ]
+            type: ApplicationCommandOptionType.User,
+            required: true,
+          },
+        ],
       },
       {
         name: "disable",
         description: "Disable access for the user",
-        type: 1,
+        type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: "user",
             description: "The user you want to remove access from",
-            type: 6,
-            required: true
-          }
-        ]
-      }
-    ]
-  }
+            type: ApplicationCommandOptionType.User,
+            required: true,
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 export const run = async (interaction: ChatInputCommandInteraction) => {
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
     return void interaction.followUp(
@@ -50,29 +50,8 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   const user = interaction.options.getUser("user", true);
 
   const userCustomer = await Postgres.getRepository(DiscordCustomer).findOne({
-    where: { discordUserId: interaction.user.id }
+    where: { discordUserId: user.id },
   });
 
   if (userCustomer) {
-    await Postgres.getRepository(DiscordCustomer).update(userCustomer.id, {
-      adminAccessEnabled: subCommand === "enable"
-    });
-  } else {
-    await Postgres.getRepository(DiscordCustomer).insert({
-      discordUserId: user.id,
-      adminAccessEnabled: subCommand === "enable"
-    });
-  }
-
-  const member = interaction.guild?.members.cache.get(user.id);
-
-  if (subCommand === "enable") {
-    if (member) await member.roles.add(process.env.ADMIN_ROLE_ID!);
-  } else {
-    if (member) await member.roles.remove(process.env.ADMIN_ROLE_ID!);
-  }
-
-  return void interaction.followUp(
-    successEmbed(`Successfully ${subCommand === "enable" ? "enabled" : "disabled"} access for ${user.tag}.`)
-  );
-};
+    await Postgres.
