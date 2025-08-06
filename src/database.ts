@@ -85,10 +85,12 @@ export const initialize = () => Postgres.initialize().then(async () => {
             }
         }, app);
         app.listen({
-            port: process.env.ADMINJS_PORT
-        }, () => {
-            console.log(`AdminJS is listening at http://localhost:${process.env.ADMINJS_PORT}`)
-        });
+  port: parseInt(process.env.PORT || "3000", 10),
+  host: "0.0.0.0"
+}, () => {
+  console.log(`AdminJS is listening at http://localhost:${process.env.PORT}`);
+});
+
     }
 
 });
