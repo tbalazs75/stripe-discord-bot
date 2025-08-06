@@ -53,6 +53,12 @@ export const Postgres = new DataSource({
     password: process.env.DB_PASSWORD,
     entities,
     synchronize: process.env.ENVIRONMENT === 'development',
+    ssl: true,
+    extra: {
+        ssl: {
+            rejectUnauthorized: false,
+        },
+    },
 });
 
 export const initialize = () => Postgres.initialize().then(async () => {
