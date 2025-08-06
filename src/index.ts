@@ -91,3 +91,16 @@ client.on('ready', () => {
 });
 
 client.login(process.env.DISCORD_CLIENT_TOKEN);
+
+// --- Webhook szerver Stripe-nak ---
+import express from "express";
+import webhookApp from "./webhook";
+
+const webhookServer = express();
+webhookServer.use("/webhook", webhookApp);
+
+const PORT = parseInt(process.env.PORT || "3000", 10);
+webhookServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Webhook server listening on port ${PORT}`);
+});
+
