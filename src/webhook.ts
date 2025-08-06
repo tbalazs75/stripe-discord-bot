@@ -1,6 +1,5 @@
 import express, { Request, Response } from "express";
 import Stripe from "stripe";
-import { buffer } from "micro"; // csak ha kellene a raw body valami más módon
 
 const router = express.Router();
 
