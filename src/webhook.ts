@@ -1,5 +1,4 @@
 import express from "express";
-import express from "express";
 import Stripe from "stripe";
 
 const router = express.Router();
