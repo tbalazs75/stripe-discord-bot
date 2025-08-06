@@ -1,3 +1,4 @@
+// Környezeti változók betöltése
 import { config } from 'dotenv';
 config();
 
@@ -5,12 +6,12 @@ import './sentry';
 
 import { initialize as initializeDatabase } from './database';
 import { loadContextMenus, loadMessageCommands, loadSlashCommands, synchronizeSlashCommands } from './handlers/commands';
-
 import { syncSheets } from './integrations/sheets';
 
 import { Client, IntentsBitField, PermissionsBitField } from 'discord.js';
 import { errorEmbed } from './util';
 import { loadTasks } from './handlers/tasks';
+
 export const client = new Client({
     intents: [
         IntentsBitField.Flags.Guilds,
@@ -30,9 +31,7 @@ synchronizeSlashCommands(client, [...slashCommandsData, ...contextMenusData], {
 });
 
 client.on('interactionCreate', async (interaction) => {
-
     if (interaction.isCommand()) {
-
         const isContext = interaction.isContextMenuCommand();
         if (isContext) {
             const run = contextMenus.get(interaction.commandName);
@@ -44,11 +43,9 @@ client.on('interactionCreate', async (interaction) => {
             run(interaction, interaction.commandName);
         }
     }
-
 });
 
 client.on('messageCreate', (message) => {
-
     if (message.author.bot) return;
 
     if (!process.env.COMMAND_PREFIX) return;
@@ -56,33 +53,30 @@ client.on('messageCreate', (message) => {
     if ((message.channelId === process.env.STATUS_CHANNEL_ID || message.channelId === process.env.SUBSCRIBE_CHANNEL_ID || message.channelId === process.env.CANCEL_CHANNEL_ID) && !message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
         message.delete();
     }
-    
+
     const args = message.content.slice(process.env.COMMAND_PREFIX.length).split(/ +/);
     const commandName = args.shift();
-
     if (!commandName) return;
 
     const run = messageCommands.get(commandName);
-    
     if (!run) return;
 
     run(message, commandName);
-
 });
 
 client.on('ready', () => {
-    console.log(`Logged in as ${client.user!.tag}. Ready to serve ${client.users.cache.size} users in ${client.guilds.cache.size} servers 🚀`);
+    console.log(`✅ Logged in as ${client.user!.tag}. Ready to serve ${client.users.cache.size} users in ${client.guilds.cache.size} servers`);
 
     if (process.env.DB_NAME) {
         initializeDatabase().then(() => {
-            console.log('Database initialized 📦');
+            console.log('📦 Database initialized');
 
             if (process.argv.includes('--sync')) {
                 tasks.tasks.first()?.run();
             }
         });
     } else {
-        console.log('Database not initialized, as no keys were specified 📦');
+        console.log('⚠️ Database not initialized, as no keys were specified');
     }
 
     if (process.env.SPREADSHEET_ID) {
@@ -92,15 +86,18 @@ client.on('ready', () => {
 
 client.login(process.env.DISCORD_CLIENT_TOKEN);
 
-// --- Webhook szerver Stripe-nak ---
-import express from "express";
-import webhookApp from "./webhook";
+// -----------------------------
+// Stripe webhook endpoint
+// -----------------------------
 
-const webhookServer = express();
-webhookServer.use("/webhook", webhookApp);
+import express from "express";
+import webhookRouter from "./webhook";
+
+const app = express();
+
+app.use("/api/webhook", webhookRouter);
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
-webhookServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Webhook server listening on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Server listening on port ${PORT}`);
 });
-
