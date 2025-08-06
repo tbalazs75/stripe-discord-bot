@@ -5,7 +5,7 @@ const router = express.Router();
 router.use(express.raw({ type: "application/json" }));
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2022-11-15",
 });
 
 router.post("/", async (req: express.Request, res: express.Response) => {
