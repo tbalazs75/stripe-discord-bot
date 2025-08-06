@@ -5,8 +5,9 @@ const app = express();
 app.use(express.raw({ type: "application/json" }));
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2022-11-15", // típus szerint ez a jó
 });
+
 
 app.post("/webhook", async (req, res) => {
   const sig = req.headers["stripe-signature"]!;
