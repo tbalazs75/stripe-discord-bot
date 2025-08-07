@@ -3,10 +3,9 @@ import Stripe from "stripe";
 
 const router = express.Router();
 
-// 1. A Stripe webhookokhoz a nyers body kell!
+// Only raw body for Stripe webhook
 router.use(express.raw({ type: "application/json" }));
 
-// 2. Stripe inicializálása
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2022-11-15",
 });
@@ -18,30 +17,32 @@ router.post("/", async (req: Request, res: Response) => {
   let event: Stripe.Event;
 
   try {
-    // 3. A nyers body miatt kell a `express.raw()` middleware fent
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
   } catch (err: any) {
     console.error("❌ Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // 4. Különféle Stripe események kezelése
   switch (event.type) {
     case "checkout.session.completed":
       console.log("✅ Subscription completed!");
-      // TODO: mentés adatbázisba
+      // TODO: save to database
       break;
 
     case "customer.subscription.deleted":
       console.log("❌ Subscription cancelled.");
-      // TODO: inaktiválás
+      // TODO: deactivate user/subscription
+      break;
+
+    case "invoice.payment_succeeded":
+      console.log("💰 Invoice payment succeeded.");
       break;
 
     default:
       console.log(`ℹ️ Unhandled event type: ${event.type}`);
   }
 
-  res.status(200).send(); // Stripe-nek visszajelezzük, hogy sikeres volt a feldolgozás
+  res.status(200).send();
 });
 
 export default router;
