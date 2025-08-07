@@ -95,8 +95,8 @@ import webhookRouter from "./webhook";
 
 const app = express();
 
-// IMPORTANT: express.raw() only for Stripe route – rest use JSON
-app.use("/api/webhook", webhookRouter);
+// Special raw middleware ONLY for Stripe webhook
+app.use("/api/webhook", express.raw({ type: "application/json" }), webhookRouter);
 
 // fallback for other routes if needed (optional)
 // app.use(express.json());
