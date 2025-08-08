@@ -100,65 +100,53 @@ app.use("/api/webhook", express.raw({ type: "application/json" }), webhookRouter
 
 // KÖSZÖNŐOLDAL – Discord invite link megjelenítése
 app.get("/thanks", (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="hu">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Köszönjük az előfizetést!</title>
-            <style>
-                body {
-                    font-family: sans-serif;
-                    text-align: center;
-                    padding: 10vh 5vw;
-                    background: #f9f9f9;
-                }
-                h1 {
-                    font-size: 6vw;
-                    max-font-size: 32px;
-                }
-                p {
-                    font-size: 4.5vw;
-                    max-font-size: 20px;
-                    margin-top: 20px;
-                }
-                a.button {
-                    font-size: 5vw;
-                    max-font-size: 20px;
-                    padding: 14px 28px;
-                    background-color: #5865F2;
-                    color: white;
-                    border-radius: 8px;
-                    text-decoration: none;
-                    display: inline-block;
-                    margin-top: 30px;
-                }
-
-                /* Asztali nézetekhez nagyobb felbontással */
-                @media (min-width: 768px) {
-                    h1 {
-                        font-size: 32px;
-                    }
-                    p {
-                        font-size: 20px;
-                    }
-                    a.button {
-                        font-size: 20px;
-                    }
-                }
-            </style>
-        </head>
-        <body>
-            <h1>Az átjáró megnyílt! 🎉</h1>
-            <p>Most már beléphetsz a Tányéros Coaching közösségbe:</p>
-            <a href="https://discord.gg/abc1234" class="button" target="_blank">
-                👉 Csatlakozom a Tanítványokhoz!
-            </a>
-        </body>
-        </html>
-    `);
+  res.send(`<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Az átjáró megnyílt! 🎉</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 10vh 5vw;
+      background: #f9f9f9;
+    }
+    h1 {
+      font-size: 6vw;
+    }
+    p {
+      font-size: 4.5vw;
+      margin-top: 20px;
+    }
+    a.button {
+      font-size: 5vw;
+      padding: 14px 28px;
+      background-color: #5865F2;
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 30px;
+    }
+    @media (min-width: 768px) {
+      h1 { font-size: 32px; }
+      p { font-size: 20px; }
+      a.button { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Az átjáró megnyílt! 🎉</h1>
+  <p>Most már beléphetsz a Tányéros Coaching közösségbe:</p>
+  <a href="https://discord.gg/abc1234" class="button" target="_blank">
+    👉 Csatlakozom a Tanítványokhoz!
+  </a>
+</body>
+</html>`);
 });
+
 
 // (opcionális) További route-ok JSON body parserrel:
 app.use(express.json());
