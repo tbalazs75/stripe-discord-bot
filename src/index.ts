@@ -95,11 +95,43 @@ import webhookRouter from "./webhook";
 
 const app = express();
 
-// Special raw middleware ONLY for Stripe webhook
+// Stripe webhook (raw body parser)
 app.use("/api/webhook", express.raw({ type: "application/json" }), webhookRouter);
 
-// fallback for other routes if needed (optional)
-// app.use(express.json());
+// KÖSZÖNŐOLDAL – Discord invite link megjelenítése
+app.get("/thanks", (req, res) => {
+    res.send(`
+        <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Köszönjük az előfizetést!</title>
+                <style>
+                    body { font-family: sans-serif; text-align: center; padding-top: 100px; background: #f9f9f9; }
+                    a.button {
+                        font-size: 18px;
+                        padding: 12px 24px;
+                        background-color: #5865F2;
+                        color: white;
+                        border-radius: 5px;
+                        text-decoration: none;
+                        display: inline-block;
+                        margin-top: 20px;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>Köszönjük az előfizetést! 🎉</h1>
+                <p>Most már csatlakozhatsz a Discord szerverünkhöz:</p>
+                <a href="https://discord.gg/AeR5KWHvqZ" class="button" target="_blank">
+                    👉 Belépés a Discord szerverre
+                </a>
+            </body>
+        </html>
+    `);
+});
+
+// (opcionális) További route-ok JSON body parserrel:
+app.use(express.json());
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 app.listen(PORT, "0.0.0.0", () => {
