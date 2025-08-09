@@ -26,9 +26,17 @@ export const commands = [
 ];
 
 export const run = async (interaction: ChatInputCommandInteraction) => {
-  if (interaction.channelId !== process.env.SUBSCRIBE_CHANNEL_ID) {
+  // ✅ Egységesített csatorna ellenőrzés + guard
+  const allowedChannelId = process.env.EMAIL_COMMAND_CHANNEL_ID;
+  if (!allowedChannelId) {
     return void interaction.reply({
-      content: `This command can only be used in <#${process.env.SUBSCRIBE_CHANNEL_ID}>.`,
+      content: `Admin error: EMAIL_COMMAND_CHANNEL_ID is not set.`,
+      ephemeral: true,
+    });
+  }
+  if (interaction.channelId !== allowedChannelId) {
+    return void interaction.reply({
+      content: `This command can only be used in <#${allowedChannelId}>.`,
       ephemeral: true,
     });
   }
@@ -45,7 +53,9 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       embeds: [
         new EmbedBuilder()
           .setColor(process.env.EMBED_COLOR || "#FFD700")
-          .setDescription(`Hey **${interaction.user.username}**, you already have an active subscription linked to your account. You can update it by specifying your email again.`),
+          .setDescription(
+            `Hey **${interaction.user.username}**, you already have an active subscription linked to your account. You can update it by specifying your email again.`
+          ),
       ],
     });
   }
@@ -56,7 +66,9 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       embeds: [
         new EmbedBuilder()
           .setColor(process.env.EMBED_COLOR || "#FFD700")
-          .setDescription(`Hey **${interaction.user.username}**, you can purchase a new subscription at ${process.env.STRIPE_PAYMENT_LINK} or claim your active subscription by using this command with the email parameter.`),
+          .setDescription(
+            `Hey **${interaction.user.username}**, you can purchase a new subscription at ${process.env.STRIPE_PAYMENT_LINK} or claim your active subscription by using this command with the email parameter.`
+          ),
       ],
     });
   }
@@ -83,7 +95,9 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   if (existingEmailCustomer) {
     return void interaction.reply({
       ephemeral: true,
-      embeds: errorEmbed(`This email address is already in use by another user. Please use a different email address or contact us if you think this is an error.`).embeds,
+      embeds: errorEmbed(
+        `This email address is already in use by another user. Please use a different email address or contact us if you think this is an error.`
+      ).embeds,
     });
   }
 
@@ -91,7 +105,9 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   if (!customerId) {
     return void interaction.reply({
       ephemeral: true,
-      embeds: errorEmbed(`You do not have an active subscription. Please buy one at ${process.env.STRIPE_PAYMENT_LINK} to access the server.`).embeds,
+      embeds: errorEmbed(
+        `You do not have an active subscription. Please buy one at ${process.env.STRIPE_PAYMENT_LINK} to access the server.`
+      ).embeds,
     });
   }
 
@@ -101,7 +117,9 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   if (activeSubscriptions.length === 0) {
     return void interaction.reply({
       ephemeral: true,
-      embeds: errorEmbed(`You do not have an active subscription. Please buy one at ${process.env.STRIPE_PAYMENT_LINK} to access the server.`).embeds,
+      embeds: errorEmbed(
+        `You do not have an active subscription. Please buy one at ${process.env.STRIPE_PAYMENT_LINK} to access the server.`
+      ).embeds,
     });
   }
 
