@@ -83,6 +83,7 @@ client.on('ready', () => {
         syncSheets();
     }
 });
+console.log('EMAIL_COMMAND_CHANNEL_ID:', process.env.EMAIL_COMMAND_CHANNEL_ID);
 
 client.login(process.env.DISCORD_CLIENT_TOKEN);
 
