@@ -121,7 +121,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   }
 
   // 🔐 Biztonságos role-assign
-  const roleId = process.env.PAYING_ROLE_ID;
+  const roleId = process.env.PAYING_ROLE_ID; // ha nálad DISCORD_ROLE_ID az env neve, írd át erre
   if (!roleId) {
     await interaction.editReply({ content: 'Admin error: PAYING_ROLE_ID is not set.' });
   } else {
@@ -135,6 +135,17 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
     } else {
       try {
         await (member as GuildMember).roles.add(roleId);
+
+        // 👇 „ismeretlen” szerep levétele, ha van
+        const unknownRoleId = process.env.UNKNOWN_ROLE_ID; // vedd fel Renderen
+        if (unknownRoleId && (member as GuildMember).roles.cache.has(unknownRoleId)) {
+          try {
+            await (member as GuildMember).roles.remove(unknownRoleId);
+          } catch (e) {
+            console.error('Unknown role remove failed:', e);
+            await interaction.followUp({ content: `Note: could not remove the old "ismeretlen" role.`, ephemeral: true });
+          }
+        }
       } catch (e) {
         console.error('Role add failed:', e);
         await interaction.followUp({ content: `Failed to assign role. Please contact an admin.`, ephemeral: true });
