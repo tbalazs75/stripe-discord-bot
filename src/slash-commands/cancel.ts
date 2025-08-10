@@ -92,11 +92,35 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
     if (!i.isButton()) return;
     if (i.customId !== customId) return;
 
+    // Stripe előfizetés törlése
     await cancelSubscription(active.id);
+
+    // Rang elvétel és DB frissítés
+    const guild = i.client.guilds.cache.get(process.env.GUILD_ID!);
+    if (guild) {
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (member) {
+        await member.roles.remove(process.env.PAYING_ROLE_ID!).catch(() => {});
+        if (process.env.LIFETIME_PAYING_ROLE_ID) {
+          await member.roles.remove(process.env.LIFETIME_PAYING_ROLE_ID).catch(() => {});
+        }
+      }
+    }
+
+    await Postgres.getRepository(DiscordCustomer).update(discordCustomer.id, {
+      hadActiveSubscription: false,
+      firstReminderSentDayCount: null
+    });
+
+    // Log
+    const logChannel = guild?.channels.cache.get(process.env.LOGS_CHANNEL_ID!) as TextChannel;
+    if (logChannel?.isTextBased()) {
+      logChannel.send(`:arrow_lower_right: **${user.tag}** (${user.id}) cancelled their subscription and lost access.`);
+    }
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: `${user.tag} cancellation`, iconURL: user.displayAvatarURL() })
-      .setDescription(`We're sorry to see you go! Your subscription has been cancelled.`)
+      .setDescription(`We're sorry to see you go! Your subscription has been cancelled and access removed.`)
       .setColor(process.env.EMBED_COLOR);
 
     await i.reply({ ephemeral: true, embeds: [embed], components: [] });
