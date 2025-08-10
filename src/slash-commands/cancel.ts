@@ -40,13 +40,14 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
     });
   }
 
+  // ⬇️ Biztonságos szín (number). Ha nincs EMBED_COLOR, alap: arany.
   const EMBED_COLOR_NUM = (() => {
-  const hex = process.env.EMBED_COLOR;           // pl. "#FFD700" vagy "FFD700"
-  if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex)) {
-    return parseInt(hex.replace('#', ''), 16);   // number (0xRRGGBB)
-  }
-  return 0xFFD700;                               // default: arany
-})();
+    const hex = process.env.EMBED_COLOR; // pl. "#FFD700" vagy "FFD700"
+    if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex)) {
+      return parseInt(hex.replace("#", ""), 16); // number (0xRRGGBB)
+    }
+    return 0xFFD700;
+  })();
 
   const user = interaction.options.getUser("user") || interaction.user;
 
@@ -85,7 +86,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   const confirmEmbed = new EmbedBuilder()
     .setAuthor({ name: `${user.tag} cancellation`, iconURL: user.displayAvatarURL() })
     .setDescription(`Are you sure you want to cancel your subscription?`)
-    .setColor(process.env.EMBED_COLOR || "#FFD700"); // fallback!
+    .setColor(EMBED_COLOR_NUM);
 
   const randomId = Math.floor(Math.random() * 900) + 100;
   const customId = `cancel-confirm-${user.id}-${randomId}`;
@@ -157,7 +158,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
     const doneEmbed = new EmbedBuilder()
       .setAuthor({ name: `${user.tag} cancellation`, iconURL: user.displayAvatarURL() })
       .setDescription(`We're sorry to see you go! Your subscription has been cancelled and access removed.`)
-      .setColor(process.env.EMBED_COLOR || "#FFD700");
+      .setColor(EMBED_COLOR_NUM); // ⬅️ itt is a numeric szín!
 
     await i.reply({ ephemeral: true, embeds: [doneEmbed], components: [] });
   });
