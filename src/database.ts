@@ -31,10 +31,14 @@ export class DiscordCustomer extends BaseEntity {
     })
     hadActiveSubscription!: boolean; // whether the member had an active subscription during last daily check
 
-    @Column({
-        nullable: true
-    })
-    firstReminderSentDayCount!: number; // 0 = first day, 1 = second day, 2 = third day, null = no reminder sent
+@Column({
+    type: "int",
+    nullable: true,
+    default: null
+})
+firstReminderSentDayCount!: number | null; // 0 = first day, 1 = second day, 2 = third day, null = no reminder sent
+
+
 
     @Column({
         default: false
