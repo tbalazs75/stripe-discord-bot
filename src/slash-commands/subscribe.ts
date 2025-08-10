@@ -161,6 +161,6 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
 
   // végső válasz
   return void interaction.editReply({
-    embeds: successEmbed(`Welcome, you are eligible to the exclusive Discord access!`).embeds,
+    embeds: successEmbed(`✅ Remek, sikeres azonosítás! Most menj a #👉első-lépések csatornára.`).embeds,
   });
 };
