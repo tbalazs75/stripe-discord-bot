@@ -1,5 +1,5 @@
 import { EmbedBuilder, Guild, GuildMember, TextChannel } from "discord.js";
-import { client } from "..";
+import { client } from "../client";
 import { DiscordCustomer, Postgres } from "../database";
 import { findActiveSubscriptions, findSubscriptionsFromCustomerId, getCustomerPayments, getLifetimePaymentDate, resolveCustomerIdFromEmail } from "../integrations/stripe";
 
@@ -8,14 +8,26 @@ export const crons = [
 ];
 
 const getExpiredEmbed = (daysLeft: 0 | 1 | 2): EmbedBuilder => {
-    const title = daysLeft > 0 ? 'Your subscription is about to expire' : 'Your subscription is expired';
-    const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setURL(process.env.STRIPE_PAYMENT_LINK)
-        .setColor(process.env.EMBED_COLOR)
-        .setDescription(`Please visit ${process.env.STRIPE_PAYMENT_LINK} to keep your exclusive access! ${daysLeft > 0 ? `Your subscription expires within ${daysLeft * 24} hours.` : ''}`);
-    return embed;
-}
+  const title = daysLeft > 0
+    ? "Your subscription is about to expire"
+    : "Your subscription is expired";
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setColor(process.env.EMBED_COLOR || "#FFD700")
+    .setDescription(
+      `Please visit ${process.env.STRIPE_PAYMENT_LINK} to keep your exclusive access! ${
+        daysLeft > 0 ? `Your subscription expires within ${daysLeft * 24} hours.` : ""
+      }`
+    );
+
+  if (process.env.STRIPE_PAYMENT_LINK) {
+    embed.setURL(process.env.STRIPE_PAYMENT_LINK);
+  }
+
+  return embed;
+};
+
 
 /**
  * 1) Mark user as inactive
