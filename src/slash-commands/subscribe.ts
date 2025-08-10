@@ -161,6 +161,6 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
 
   // végső válasz
   return void interaction.editReply({
-    embeds: successEmbed(`Remek, sikeres azonosítás! Most menj a #👉első-lépések csatornára.`).embeds,
+    embeds: successEmbed(`Remek, sikeres azonosítás! Menj a <#1401520437502021632> csatornára.`).embeds,
   });
 };
