@@ -26,6 +26,8 @@ export const commands = [
 ];
 
 export const run = async (interaction: ChatInputCommandInteraction) => {
+  console.log('[subscribe] Running in process:', process.env.RENDER_SERVICE_NAME || 'unknown service');
+
   // ✅ Egységesített csatorna ellenőrzés + guard
   const allowedChannelId = process.env.EMAIL_COMMAND_CHANNEL_ID;
   if (!allowedChannelId) {
@@ -34,6 +36,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       ephemeral: true,
     });
   }
+
   if (interaction.channelId !== allowedChannelId) {
     return void interaction.reply({
       content: `This command can only be used in <#${allowedChannelId}>.`,
