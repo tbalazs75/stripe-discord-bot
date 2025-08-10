@@ -13,14 +13,6 @@ import { Client, IntentsBitField, PermissionsBitField } from 'discord.js';
 import { errorEmbed } from './util';
 import { loadTasks } from './handlers/tasks';
 
-export const client = new Client({
-    intents: [
-        IntentsBitField.Flags.Guilds,
-        IntentsBitField.Flags.GuildMessages,
-        IntentsBitField.Flags.GuildMembers
-    ]
-});
-
 const { slashCommands, slashCommandsData } = loadSlashCommands(client);
 const { contextMenus, contextMenusData } = loadContextMenus(client);
 const messageCommands = loadMessageCommands(client);
