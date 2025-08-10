@@ -40,6 +40,14 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
     });
   }
 
+  const EMBED_COLOR_NUM = (() => {
+  const hex = process.env.EMBED_COLOR;           // pl. "#FFD700" vagy "FFD700"
+  if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex)) {
+    return parseInt(hex.replace('#', ''), 16);   // number (0xRRGGBB)
+  }
+  return 0xFFD700;                               // default: arany
+})();
+
   const user = interaction.options.getUser("user") || interaction.user;
 
   if (
