@@ -1,8 +1,10 @@
 import express, { Request, Response } from "express";
 import Stripe from "stripe";
-import { Postgres, DiscordCustomer } from "../database";
-import { Client, GuildMember } from "discord.js";
-import { client } from "../client"; // <-- ugyanaz a Client példány, amit a bot használ
+import { Postgres } from "./database";
+import { DiscordCustomer } from "./database/entities/DiscordCustomer";
+import { GuildMember } from "discord.js";
+import { client } from "./client"; // ugyanaz a Client példány, amit a bot használ
+
 
 const router = express.Router();
 
