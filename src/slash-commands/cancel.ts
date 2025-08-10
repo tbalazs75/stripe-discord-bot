@@ -1,5 +1,19 @@
-import { ChatInputCommandInteraction, PermissionsBitField, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ButtonInteraction } from "discord.js";
-import { cancelSubscription, findActiveSubscriptions, findSubscriptionsFromCustomerId, resolveCustomerIdFromEmail } from "../integrations/stripe";
+import {
+  ChatInputCommandInteraction,
+  PermissionsBitField,
+  TextChannel,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  ButtonInteraction,
+} from "discord.js";
+import {
+  cancelSubscription,
+  findActiveSubscriptions,
+  findSubscriptionsFromCustomerId,
+  resolveCustomerIdFromEmail,
+} from "../integrations/stripe";
 import { Postgres, DiscordCustomer } from "../database";
 import { errorEmbed } from "../util";
 
@@ -28,7 +42,10 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
 
   const user = interaction.options.getUser("user") || interaction.user;
 
-  if (interaction.options.getUser("user") && !interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+  if (
+    interaction.options.getUser("user") &&
+    !interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)
+  ) {
     return void interaction.reply({
       content: `You don't have the permission to cancel someone else's subscription.`,
       ephemeral: true,
@@ -36,9 +53,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   }
 
   const discordCustomer = await Postgres.getRepository(DiscordCustomer).findOne({
-    where: {
-      discordUserId: user.id,
-    },
+    where: { discordUserId: user.id },
   });
 
   if (!discordCustomer) {
@@ -62,17 +77,14 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   const confirmEmbed = new EmbedBuilder()
     .setAuthor({ name: `${user.tag} cancellation`, iconURL: user.displayAvatarURL() })
     .setDescription(`Are you sure you want to cancel your subscription?`)
-    .setColor(process.env.EMBED_COLOR);
+    .setColor(process.env.EMBED_COLOR || "#FFD700"); // fallback!
 
   const randomId = Math.floor(Math.random() * 900) + 100;
   const customId = `cancel-confirm-${user.id}-${randomId}`;
 
   const components = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(customId)
-        .setLabel("Confirm")
-        .setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(customId).setLabel("Confirm").setStyle(ButtonStyle.Danger)
     ),
   ];
 
@@ -88,42 +100,58 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
 
   collector.on("collect", async (_i) => {
     const i = _i as ButtonInteraction;
+    if (!i.isButton() || i.customId !== customId) return;
 
-    if (!i.isButton()) return;
-    if (i.customId !== customId) return;
-
-    // Stripe előfizetés törlése
+    // 1) Stripe lemondás
     await cancelSubscription(active.id);
 
-    // Rang elvétel és DB frissítés
+    // 2) Rangok módosítása
     const guild = i.client.guilds.cache.get(process.env.GUILD_ID!);
+    const payingRoleId = process.env.DISCORD_ROLE_ID || process.env.PAYING_ROLE_ID;
+    const lifetimeRoleId = process.env.LIFETIME_PAYING_ROLE_ID;
+    const unknownRoleId = process.env.UNKNOWN_ROLE_ID;
+
     if (guild) {
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (member) {
-        await member.roles.remove(process.env.PAYING_ROLE_ID!).catch(() => {});
-        if (process.env.LIFETIME_PAYING_ROLE_ID) {
-          await member.roles.remove(process.env.LIFETIME_PAYING_ROLE_ID).catch(() => {});
+        try {
+          if (payingRoleId && member.roles.cache.has(payingRoleId)) {
+            await member.roles.remove(payingRoleId).catch(() => {});
+          }
+          if (lifetimeRoleId && member.roles.cache.has(lifetimeRoleId)) {
+            await member.roles.remove(lifetimeRoleId).catch(() => {});
+          }
+          if (unknownRoleId) {
+            await member.roles.add(unknownRoleId).catch(() => {});
+          }
+        } catch (e) {
+          console.error("[/cancel] role updates failed:", e);
         }
       }
     }
 
+    // 3) DB frissítés
     await Postgres.getRepository(DiscordCustomer).update(discordCustomer.id, {
       hadActiveSubscription: false,
-      firstReminderSentDayCount: null
+      firstReminderSentDayCount: null,
     });
 
-    // Log
-    const logChannel = guild?.channels.cache.get(process.env.LOGS_CHANNEL_ID!) as TextChannel;
+    // 4) Log
+    const logChannelId = process.env.LOGS_CHANNEL_ID;
+    const logChannel =
+      guild && logChannelId ? (guild.channels.cache.get(logChannelId) as TextChannel | undefined) : undefined;
     if (logChannel?.isTextBased()) {
-      logChannel.send(`:arrow_lower_right: **${user.tag}** (${user.id}) cancelled their subscription and lost access.`);
+      logChannel.send(
+        `:arrow_lower_right: **${user.tag}** (${user.id}) cancelled their subscription and lost access.`
+      );
     }
 
-    const embed = new EmbedBuilder()
+    const doneEmbed = new EmbedBuilder()
       .setAuthor({ name: `${user.tag} cancellation`, iconURL: user.displayAvatarURL() })
       .setDescription(`We're sorry to see you go! Your subscription has been cancelled and access removed.`)
-      .setColor(process.env.EMBED_COLOR);
+      .setColor(process.env.EMBED_COLOR || "#FFD700");
 
-    await i.reply({ ephemeral: true, embeds: [embed], components: [] });
+    await i.reply({ ephemeral: true, embeds: [doneEmbed], components: [] });
   });
 
   collector.on("end", async () => {
