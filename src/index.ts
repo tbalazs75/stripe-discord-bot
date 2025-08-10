@@ -1,5 +1,6 @@
 // Környezeti változók betöltése
 import { config } from 'dotenv';
+import { client } from "./client";
 config();
 
 import './sentry';
