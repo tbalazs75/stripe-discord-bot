@@ -69,4 +69,98 @@ export const run = async () => {
     await new Promise<void>((resolve) => client.once("ready", () => resolve()));
   }
 
-  // ⬇⬇⬇ kicsi robust map
+  // ⬇⬇⬇ kicsi robust mapping
+  const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID!;
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) {
+    console.error("[Daily Check] Guild not found. Check DISCORD_GUILD_ID/GUILD_ID env.");
+    return;
+  }
+  await guild.members.fetch(); // cache feltöltés
+
+  const customers = await Postgres.getRepository(DiscordCustomer).find({});
+
+  for (const customer of customers) {
+    if (!customer.email || customer.adminAccessEnabled) continue;
+
+    console.log(`[Daily Check] Checking ${customer.email}`);
+    const customerId = await resolveCustomerIdFromEmail(customer.email);
+    if (!customerId) {
+      console.log(`[Daily Check] Could not find customer id for ${customer.email}`);
+      continue;
+    }
+
+    const subscriptions = await findSubscriptionsFromCustomerId(customerId);
+    const activeSubscriptions = findActiveSubscriptions(subscriptions) || [];
+
+    const userPayments = await getCustomerPayments(customerId);
+    const hasLifetime = !!(await getLifetimePaymentDate(userPayments));
+
+    const member =
+      (await guild.members.fetch(customer.discordUserId).catch(() => null)) ||
+      guild.members.cache.get(customer.discordUserId) ||
+      null;
+
+    // ====== AKTÍV / LIFETIME ======
+    if (activeSubscriptions.length > 0 || hasLifetime) {
+      console.log(`${customer.email} has active subscriptions${hasLifetime ? " (lifetime)" : ""}.`);
+
+      if (!customer.hadActiveSubscription || customer.firstReminderSentDayCount !== null) {
+        await Postgres.getRepository(DiscordCustomer).update(customer.id, {
+          hadActiveSubscription: true,
+          firstReminderSentDayCount: null,
+        });
+      }
+
+      // ⬇⬇⬇ EDDIG: kézzel add/remove. HELYETTE: roleManager-rel végállapot.
+      await applyMembershipState(client, customer.discordUserId, "active", {
+        reason: "daily-check: active",
+        assignLifetime: hasLifetime, // ha life-time jogosultsága van, maradjon is rajta
+      });
+
+      continue;
+    }
+
+    // ====== NEM AKTÍV ======
+    // nincs aktív: ha eddig sem volt aktív, nincs teendő (de ha Unknown nincs rajta, roleManager majd beállítja, ha hívnánk)
+    if (!customer.hadActiveSubscription) continue;
+
+    // ha NEM 'unpaid' és lejárt → azonnali értesítés + teljes visszavonás
+    if (!subscriptions.some((sub: any) => sub.status === "unpaid")) {
+      const m =
+        (await guild.members.fetch(customer.discordUserId).catch(() => null)) ||
+        guild.members.cache.get(customer.discordUserId) ||
+        null;
+
+      console.log(`[Daily Check] Unpaid ${customer.email}`);
+      if (m) m.send({ embeds: [getExpiredEmbed(0)] }).catch(() => {});
+      await makeMemberExpire(customer, m, guild);
+      continue;
+    }
+
+    if (customer.firstReminderSentDayCount === null) {
+      console.log(`[Daily Check] Sending first reminder to ${customer.email}`);
+      if (member) member.send({ embeds: [getExpiredEmbed(2)] }).catch(() => {});
+      await Postgres.getRepository(DiscordCustomer).update(customer.id, { firstReminderSentDayCount: 2 });
+      continue;
+    }
+
+    if (customer.firstReminderSentDayCount === 2) {
+      console.log(`[Daily Check] Sending second reminder to ${customer.email}`);
+      if (member) member.send({ embeds: [getExpiredEmbed(1)] }).catch(() => {});
+      await Postgres.getRepository(DiscordCustomer).update(customer.id, { firstReminderSentDayCount: 1 });
+      continue;
+    }
+
+    if (customer.firstReminderSentDayCount === 1) {
+      console.log(`[Daily Check] Sending third reminder to ${customer.email}`);
+      const m =
+        (await guild.members.fetch(customer.discordUserId).catch(() => null)) ||
+        guild.members.cache.get(customer.discordUserId) ||
+        null;
+      if (m) m.send({ embeds: [getExpiredEmbed(0)] }).catch(() => {});
+      await makeMemberExpire(customer, m, guild);
+      continue;
+    }
+  }
+};
