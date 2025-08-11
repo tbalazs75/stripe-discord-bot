@@ -13,11 +13,11 @@ import { Not } from "typeorm";
 export const commands = [
   {
     name: "subscribe",
-    description: "Subscribe or claim your active subscription!",
+    description: "Előfizetés vásárlása vagy meglévő előfizetés összekötése.",
     options: [
       {
         name: "email",
-        description: "Your email address",
+        description: "Az e-mail címed",
         type: ApplicationCommandOptionType.String,
         required: false,
       },
@@ -32,10 +32,10 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   // ✅ Egységesített csatorna ellenőrzés + guard
   const allowedChannelId = process.env.EMAIL_COMMAND_CHANNEL_ID;
   if (!allowedChannelId) {
-    return void interaction.editReply({ content: `Admin error: EMAIL_COMMAND_CHANNEL_ID is not set.` });
+    return void interaction.editReply({ content: `Admin hiba: nincs beállítva az EMAIL_COMMAND_CHANNEL_ID.` });
   }
   if (interaction.channelId !== allowedChannelId) {
-    return void interaction.editReply({ content: `This command can only be used in <#${allowedChannelId}>.` });
+    return void interaction.editReply({ content: `Ezt a parancsot csak itt használhatod: <#${allowedChannelId}>.` });
   }
 
   const email = interaction.options.getString("email");
@@ -49,7 +49,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       embeds: [
         new EmbedBuilder()
           .setColor(process.env.EMBED_COLOR || "#FFD700")
-          .setDescription(`Hey **${interaction.user.username}**, you already have an active subscription linked to your account. You can update it by specifying your email again.`),
+          .setDescription(`Szia **${interaction.user.username}**! Már van aktív előfizetésed a fiókodhoz társítva. Ha frissíteni szeretnéd, add meg újra az e-mail címedet.`),
       ],
     });
   }
@@ -59,7 +59,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       embeds: [
         new EmbedBuilder()
           .setColor(process.env.EMBED_COLOR || "#FFD700")
-          .setDescription(`Hey **${interaction.user.username}**, you can purchase a new subscription at ${process.env.STRIPE_PAYMENT_LINK} or claim your active subscription by using this command with the email parameter.`),
+          .setDescription(`Szia **${interaction.user.username}**! Új előfizetést itt tudsz vásárolni: ${process.env.STRIPE_PAYMENT_LINK}. Ha már van aktív előfizetésed, add meg az e-mail címedet ezzel a paranccsal a hozzárendeléshez.`),
       ],
     });
   }
@@ -70,7 +70,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       embeds: [
         new EmbedBuilder()
           .setColor(process.env.EMBED_COLOR || "#FFD700")
-          .setDescription(`The email address you provided is not valid.`),
+          .setDescription(`A megadott e-mail cím formátuma érvénytelen.`),
       ],
     });
   }
@@ -84,7 +84,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
 
   if (existingEmailCustomer) {
     return void interaction.editReply({
-      embeds: errorEmbed(`This email address is already in use by another user. Please use a different email address or contact us if you think this is an error.`).embeds,
+      embeds: errorEmbed(`Ezt az e-mail címet már egy másik felhasználó használja. Ha szerinted ez hiba, kérlek jelezd nekünk!`).embeds,
     });
   }
 
@@ -92,7 +92,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   const customerId = await resolveCustomerIdFromEmail(email);
   if (!customerId) {
     return void interaction.editReply({
-      embeds: errorEmbed(`You do not have an active subscription. Please buy one at ${process.env.STRIPE_PAYMENT_LINK} to access the server.`).embeds,
+      embeds: errorEmbed(`Nincs aktív előfizetésed. A szerverhez való hozzáféréshez itt tudsz vásárolni: ${process.env.STRIPE_PAYMENT_LINK}`).embeds,
     });
   }
 
@@ -101,7 +101,7 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
 
   if (activeSubscriptions.length === 0) {
     return void interaction.editReply({
-      embeds: errorEmbed(`You do not have an active subscription. Please buy one at ${process.env.STRIPE_PAYMENT_LINK} to access the server.`).embeds,
+      embeds: errorEmbed(`Nincs aktív előfizetésed. A szerverhez való hozzáféréshez itt tudsz vásárolni: ${process.env.STRIPE_PAYMENT_LINK}`).embeds,
     });
   }
 
@@ -123,15 +123,15 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
   // 🔐 Biztonságos role-assign
   const roleId = process.env.PAYING_ROLE_ID; // ha nálad DISCORD_ROLE_ID az env neve, írd át erre
   if (!roleId) {
-    await interaction.editReply({ content: 'Admin error: PAYING_ROLE_ID is not set.' });
+    await interaction.editReply({ content: "Admin hiba: nincs beállítva a PAYING_ROLE_ID." });
   } else {
     const role = interaction.guild?.roles.cache.get(roleId);
     const member = await interaction.guild?.members.fetch(interaction.user.id).catch(() => null);
 
     if (!role) {
-      await interaction.followUp({ content: `Admin error: role ${roleId} not found in this guild.`, ephemeral: true });
+      await interaction.followUp({ content: `Admin hiba: a(z) ${roleId} szerepkör nem található ezen a szerveren.`, ephemeral: true });
     } else if (!member) {
-      await interaction.followUp({ content: `Could not fetch your guild member.`, ephemeral: true });
+      await interaction.followUp({ content: `Nem sikerült lekérni a felhasználói adataidat a szerverről.`, ephemeral: true });
     } else {
       try {
         await (member as GuildMember).roles.add(roleId);
@@ -143,17 +143,17 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
             await (member as GuildMember).roles.remove(unknownRoleId);
           } catch (e) {
             console.error('Unknown role remove failed:', e);
-            await interaction.followUp({ content: `Note: could not remove the old "ismeretlen" role.`, ephemeral: true });
+            await interaction.followUp({ content: `Megjegyzés: az „Ismeretlen” szerep eltávolítása nem sikerült.`, ephemeral: true });
           }
         }
       } catch (e) {
         console.error('Role add failed:', e);
-        await interaction.followUp({ content: `Failed to assign role. Please contact an admin.`, ephemeral: true });
+        await interaction.followUp({ content: `Nem sikerült hozzárendelni a szerepkört. Kérlek, vedd fel a kapcsolatot egy adminnal.`, ephemeral: true });
       }
     }
   }
 
-  // Log csatorna (ha van)
+  // Log csatorna (ha van) – marad angolul
   const logChannel = interaction.guild?.channels.cache.get(process.env.LOGS_CHANNEL_ID!) as TextChannel | undefined;
   if (logChannel?.isTextBased()) {
     logChannel.send(`:arrow_upper_right: **${interaction.user.tag}** (${interaction.user.id}, <@${interaction.user.id}>) has been linked to \`${email}\`.`);
