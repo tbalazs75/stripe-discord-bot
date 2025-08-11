@@ -114,27 +114,33 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
     // 1) Stripe lemondás
     await cancelSubscription(active.id);
 
-    // 2) Rangok módosítása
+    // 2) Rangok módosítása – MINDENT leveszünk (kivéve @everyone + KEEP), majd unknown vissza
     const guild = i.client.guilds.cache.get(process.env.GUILD_ID!);
-    const payingRoleId = process.env.DISCORD_ROLE_ID || process.env.PAYING_ROLE_ID;
-    const lifetimeRoleId = process.env.LIFETIME_PAYING_ROLE_ID;
     const unknownRoleId = process.env.UNKNOWN_ROLE_ID;
+
+    // ide tehetsz olyan role ID-kat, amiket SOHA ne vegyen le (pl. admin/mod)
+    const KEEP_ROLE_IDS = new Set<string>([
+      // pl.: process.env.ADMIN_ROLE_ID || "",
+    ]);
 
     if (guild) {
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (member) {
         try {
-          if (payingRoleId && member.roles.cache.has(payingRoleId)) {
-            await member.roles.remove(payingRoleId).catch(() => {});
-          }
-          if (lifetimeRoleId && member.roles.cache.has(lifetimeRoleId)) {
-            await member.roles.remove(lifetimeRoleId).catch(() => {});
-          }
+          const everyoneId = guild.id;
+          const rolesToRemove = member.roles.cache.filter((r) => {
+            if (r.id === everyoneId) return false;
+            if (KEEP_ROLE_IDS.has(r.id)) return false;
+            return true;
+          });
+
+          await Promise.all(rolesToRemove.map((r) => member.roles.remove(r.id).catch(() => {})));
+
           if (unknownRoleId) {
             await member.roles.add(unknownRoleId).catch(() => {});
           }
         } catch (e) {
-          console.error("[/cancel] role updates failed:", e);
+          console.error("[/cancel] bulk role updates failed:", e);
         }
       }
     }
@@ -151,14 +157,14 @@ export const run = async (interaction: ChatInputCommandInteraction) => {
       guild && logChannelId ? (guild.channels.cache.get(logChannelId) as TextChannel | undefined) : undefined;
     if (logChannel?.isTextBased()) {
       logChannel.send(
-        `:arrow_lower_right: **${user.tag}** (${user.id}) cancelled their subscription and lost access.`
+        `:arrow_lower_right: **${user.tag}** (${user.id}) cancelled their subscription. All roles removed (except kept), unknown reapplied.`
       );
     }
 
     const doneEmbed = new EmbedBuilder()
       .setAuthor({ name: `${user.tag} cancellation`, iconURL: user.displayAvatarURL() })
       .setDescription(`We're sorry to see you go! Your subscription has been cancelled and access removed.`)
-      .setColor(EMBED_COLOR_NUM); // ⬅️ itt is a numeric szín!
+      .setColor(EMBED_COLOR_NUM);
 
     await i.reply({ ephemeral: true, embeds: [doneEmbed], components: [] });
   });
