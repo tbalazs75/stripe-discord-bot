@@ -1,6 +1,6 @@
-import { Client, Guild, GuildMember } from "discord.js";
+import { Client, Guild, GuildMember, TextChannel } from "discord.js";
 
-type MembershipState = "active" | "inactive";
+export type MembershipState = "active" | "inactive";
 
 const env = (k: string) => process.env[k] ?? "";
 
@@ -10,12 +10,16 @@ const LIFETIME_ROLE_ID = env("LIFETIME_PAYING_ROLE_ID");
 const UNKNOWN_ROLE_ID = env("UNKNOWN_ROLE_ID");
 const LOGS_CHANNEL_ID = env("LOGS_CHANNEL_ID");
 
-// opcionális: vesszővel elválasztva adj meg role ID-ket, amiket SOHA ne vegyünk le (pl. admin/mod)
 // KEEP_ROLE_IDS="123,456,789"
-const KEEP_ROLE_IDS = (env("KEEP_ROLE_IDS") || "")
+const RAW_KEEP_ROLE_IDS = (env("KEEP_ROLE_IDS") || "")
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
+
+function requireEnv(name: string, value?: string) {
+  if (!value) throw new Error(`Missing env: ${name}`);
+  return value;
+}
 
 function filterExistingRoleIds(guild: Guild, ids: (string|undefined)[]) {
   const set = new Set<string>();
@@ -26,8 +30,17 @@ function filterExistingRoleIds(guild: Guild, ids: (string|undefined)[]) {
   return [...set];
 }
 
+// Ne lehessen véletlenül PAYING/LIFETIME/UNKNOWN a keep-ben
+function sanitizeKeep(guild: Guild) {
+  const forbids = new Set([PAYING_ROLE_ID, LIFETIME_ROLE_ID, UNKNOWN_ROLE_ID].filter(Boolean));
+  return filterExistingRoleIds(
+    guild,
+    RAW_KEEP_ROLE_IDS.filter(id => !forbids.has(id))
+  );
+}
+
 async function ensureGuild(client: Client): Promise<Guild> {
-  if (!GUILD_ID) throw new Error("GUILD_ID/DISCORD_GUILD_ID hiányzik az env-ből.");
+  requireEnv("DISCORD_GUILD_ID / GUILD_ID", GUILD_ID);
   return client.guilds.fetch(GUILD_ID);
 }
 
@@ -39,56 +52,73 @@ async function fetchMember(guild: Guild, userId: string): Promise<GuildMember | 
   }
 }
 
+async function logToChannel(guild: Guild, message: string) {
+  if (!LOGS_CHANNEL_ID) return;
+  const ch = await guild.channels.fetch(LOGS_CHANNEL_ID).catch(() => null);
+  if (ch && ch.isTextBased()) {
+    (ch as TextChannel).send({ content: message }).catch(() => {});
+  }
+}
+
 /**
  * Egységes, idempotens role beállítás:
- * - "active": keep + PAYING (+ megtartjuk a már meglévő LIFETIME-ot) – és levesszük az UNKNOWN-t
- * - "inactive": keep + UNKNOWN – MINDENT MÁST törlünk (paying, lifetime, extra csatorna rangok stb.)
+ * - "active": keep + PAYING (+ LIFETIME ha már volt vagy assignLifetime), UNKNOWN biztosan LE
+ * - "inactive": keep + UNKNOWN, MINDEN MÁS LE
  */
 export async function applyMembershipState(
   client: Client,
   userId: string,
   state: MembershipState,
-  opts?: { reason?: string; assignLifetime?: boolean } // assignLifetime: akkor add LIFETIME-ot is aktívnál
+  opts?: { reason?: string; assignLifetime?: boolean }
 ) {
   const guild = await ensureGuild(client);
   const member = await fetchMember(guild, userId);
   if (!member) return;
 
-  // sose próbáljuk az @everyone-t állítani – a Discord kezeli automatikusan
-  const keep = new Set<string>(filterExistingRoleIds(guild, KEEP_ROLE_IDS));
+  const keep = new Set<string>(sanitizeKeep(guild));
 
-  // ha aktív, a végső halmaz:
-  if (state === "active") {
-    const finalRoles = new Set<string>(keep);
-    // fizetős role kötelező, ha van
-    filterExistingRoleIds(guild, [PAYING_ROLE_ID]).forEach(id => finalRoles.add(id));
+  try {
+    if (state === "active") {
+      const finalRoles = new Set<string>(keep);
 
-    // Lifetime: vagy ha már VAN neki, vagy ha kifejezetten kérjük az opts.assignLifetime-t
-    const memberHasLifetime = LIFETIME_ROLE_ID && member.roles.cache.has(LIFETIME_ROLE_ID);
-    if (memberHasLifetime || opts?.assignLifetime) {
-      filterExistingRoleIds(guild, [LIFETIME_ROLE_ID]).forEach(id => finalRoles.add(id));
+      // kötelező: fizetős
+      filterExistingRoleIds(guild, [PAYING_ROLE_ID]).forEach(id => finalRoles.add(id));
+
+      // Lifetime: ha már rajta van vagy explicit kérjük
+      const memberHasLifetime = !!(LIFETIME_ROLE_ID && member.roles.cache.has(LIFETIME_ROLE_ID));
+      if (memberHasLifetime || opts?.assignLifetime) {
+        filterExistingRoleIds(guild, [LIFETIME_ROLE_ID]).forEach(id => finalRoles.add(id));
+      }
+
+      const toSet = filterExistingRoleIds(guild, [...finalRoles]);
+      await member.roles.set(toSet, opts?.reason ?? "membership: ACTIVE → set final roles");
+
+      // biztos-ami-biztos: ha UNKNOWN mégis rajta maradt (pl. cache/permission anomália), próbáljuk levenni
+      if (UNKNOWN_ROLE_ID && member.roles.cache.has(UNKNOWN_ROLE_ID)) {
+        await member.roles.remove(UNKNOWN_ROLE_ID).catch(() => {});
+      }
+    } else {
+      // INACTIVE: keep + unknown
+      const finalRoles = new Set<string>(keep);
+      filterExistingRoleIds(guild, [UNKNOWN_ROLE_ID]).forEach(id => finalRoles.add(id));
+
+      const toSet = filterExistingRoleIds(guild, [...finalRoles]);
+      await member.roles.set(toSet, opts?.reason ?? "membership: INACTIVE → wipe to UNKNOWN");
     }
-
-    // biztosan NE maradjon rajta az Ismeretlen
-    const toSet = filterExistingRoleIds(guild, [...finalRoles]);
-    await member.roles.set(toSet, opts?.reason ?? "membership: ACTIVE → set final roles");
-
-  } else {
-    // INACTIVE: mindent wipe-olunk, kivéve a keep + UNKNOWN
-    const finalRoles = new Set<string>(keep);
-    filterExistingRoleIds(guild, [UNKNOWN_ROLE_ID]).forEach(id => finalRoles.add(id));
-
-    const toSet = filterExistingRoleIds(guild, [...finalRoles]);
-    await member.roles.set(toSet, opts?.reason ?? "membership: INACTIVE → wipe to UNKNOWN");
+  } catch (err: any) {
+    // tipikus ok: bot szerep alacsonyan van a hierarchiában / hiányzó Manage Roles
+    await logToChannel(
+      guild,
+      `⚠️ Role update failed for <@${userId}>: ${err?.message ?? err}`
+    );
+    throw err;
   }
 
   // opcionális log
-  if (LOGS_CHANNEL_ID && guild.channels.cache.has(LOGS_CHANNEL_ID)) {
-    const ch = guild.channels.cache.get(LOGS_CHANNEL_ID);
-    if (ch?.isTextBased()) {
-      const now = new Date().toISOString();
-      const tag = member.user?.tag ?? userId;
-      ch.send(`[${now}] ${tag} → ${state.toUpperCase()} | roles set (${opts?.reason ?? ""})`).catch(() => {});
-    }
-  }
+  const now = new Date().toISOString();
+  const tag = member.user?.tag ?? userId;
+  await logToChannel(
+    guild,
+    `[${now}] ${tag} → ${state.toUpperCase()} | roles set (${opts?.reason ?? ""})`
+  );
 }
