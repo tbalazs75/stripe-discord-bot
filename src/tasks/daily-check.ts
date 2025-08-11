@@ -11,18 +11,15 @@ import {
 
 export const crons = ["0 0 1 * * *"]; // minden nap 01:00
 
-// 🔒 Biztonságos, numerikus szín (ha nincs EMBED_COLOR, arany a default)
+// Biztonságos, numerikus embed-szín
 const EMBED_COLOR_NUM = (() => {
   const hex = process.env.EMBED_COLOR; // pl. "#FFD700" vagy "FFD700"
-  if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex)) {
-    return parseInt(hex.replace("#", ""), 16);
-  }
+  if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex)) return parseInt(hex.replace("#", ""), 16);
   return 0xffd700;
 })();
 
 const getExpiredEmbed = (daysLeft: 0 | 1 | 2): EmbedBuilder => {
   const title = daysLeft > 0 ? "Your subscription is about to expire" : "Your subscription is expired";
-
   const embed = new EmbedBuilder()
     .setTitle(title)
     .setColor(EMBED_COLOR_NUM)
@@ -31,24 +28,19 @@ const getExpiredEmbed = (daysLeft: 0 | 1 | 2): EmbedBuilder => {
         daysLeft > 0 ? `Your subscription expires within ${daysLeft * 24} hours.` : ""
       }`
     );
-
-  if (process.env.STRIPE_PAYMENT_LINK) {
-    embed.setURL(process.env.STRIPE_PAYMENT_LINK);
-  }
-
+  if (process.env.STRIPE_PAYMENT_LINK) embed.setURL(process.env.STRIPE_PAYMENT_LINK);
   return embed;
 };
 
 /**
- * 1) Mark user as inactive
- * 2) Clear reminders
- * 3) Remove role(s) / add unknown
- * 4) Send logs
+ * 1) DB-ben inaktivál
+ * 2) emlékeztető számlálót nulláz
+ * 3) role-ok: fizetős/lifetime le, „ismeretlen” fel (ha van)
+ * 4) log csatornára üzen
  */
 const makeMemberExpire = async (customer: DiscordCustomer, member: GuildMember | null, guild: Guild) => {
   await Postgres.getRepository(DiscordCustomer).update(customer.id, {
     hadActiveSubscription: false,
-    // @ts-ignore
     firstReminderSentDayCount: null,
   });
 
@@ -82,9 +74,18 @@ const makeMemberExpire = async (customer: DiscordCustomer, member: GuildMember |
 };
 
 export const run = async () => {
+  // várd meg, míg a bot belogol
+  if (!client.isReady()) {
+    await new Promise<void>((resolve) => client.once("ready", () => resolve()));
+  }
+
   const guildId = process.env.GUILD_ID!;
-  const guild = await client.guilds.fetch(guildId);
-  await guild.members.fetch(); // cache feltöltés – nagy szervernél lassabb lehet
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) {
+    console.error("[Daily Check] Guild not found. Check GUILD_ID env.");
+    return;
+  }
+  await guild.members.fetch(); // cache feltöltés
 
   const customers = await Postgres.getRepository(DiscordCustomer).find({});
 
@@ -108,7 +109,6 @@ export const run = async () => {
     const lifetimeRoleId = process.env.LIFETIME_PAYING_ROLE_ID;
     const unknownRoleId = process.env.UNKNOWN_ROLE_ID;
 
-    // próbáljuk fetch-el, ha nem menne, cache-ből
     const member =
       (await guild.members.fetch(customer.discordUserId).catch(() => null)) ||
       guild.members.cache.get(customer.discordUserId) ||
@@ -117,10 +117,9 @@ export const run = async () => {
     if (activeSubscriptions.length > 0 || hasLifetime) {
       console.log(`${customer.email} has active subscriptions${hasLifetime ? " (lifetime)" : ""}.`);
 
-      if (!customer.hadActiveSubscription || customer.firstReminderSentDayCount) {
+      if (!customer.hadActiveSubscription || customer.firstReminderSentDayCount !== null) {
         await Postgres.getRepository(DiscordCustomer).update(customer.id, {
           hadActiveSubscription: true,
-          // @ts-ignore
           firstReminderSentDayCount: null,
         });
       }
@@ -129,7 +128,6 @@ export const run = async () => {
         try {
           if (payingRoleId) await member.roles.add(payingRoleId).catch(() => {});
           if (hasLifetime && lifetimeRoleId) await member.roles.add(lifetimeRoleId).catch(() => {});
-          // ha van „ismeretlen” role és rajta van, vedd le
           if (unknownRoleId && member.roles.cache.has(unknownRoleId)) {
             await member.roles.remove(unknownRoleId).catch(() => {});
           }
@@ -156,7 +154,7 @@ export const run = async () => {
       continue;
     }
 
-    if (!customer.firstReminderSentDayCount) {
+    if (customer.firstReminderSentDayCount === null) {
       console.log(`[Daily Check] Sending first reminder to ${customer.email}`);
       if (member) member.send({ embeds: [getExpiredEmbed(2)] }).catch(() => {});
       await Postgres.getRepository(DiscordCustomer).update(customer.id, { firstReminderSentDayCount: 2 });
