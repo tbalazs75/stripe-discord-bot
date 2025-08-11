@@ -9,8 +9,8 @@ import {
   resolveCustomerIdFromEmail,
 } from "../integrations/stripe";
 
-// ⬇⬇⬇ ÚJ: egységes role-kezelő
-import { applyMembershipState } from "../services/roleManager"; // <-- útvonalat igazítsd
+// egységes role-kezelő
+import { applyMembershipState } from "../services/roleManager";
 
 export const crons = ["0 0 1 * * *"]; // minden nap 01:00
 
@@ -47,7 +47,6 @@ const makeMemberExpire = async (customer: DiscordCustomer, member: GuildMember |
     firstReminderSentDayCount: null,
   });
 
-  // ⬇⬇⬇ EDDIG: kézi role eltávolítás volt. HELYETTE: egységes végállapot beállítás.
   await applyMembershipState(client, customer.discordUserId, "inactive", {
     reason: "daily-check: expire",
   });
@@ -69,7 +68,6 @@ export const run = async () => {
     await new Promise<void>((resolve) => client.once("ready", () => resolve()));
   }
 
-  // ⬇⬇⬇ kicsi robust mapping
   const guildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID!;
   const guild = client.guilds.cache.get(guildId);
   if (!guild) {
@@ -101,10 +99,17 @@ export const run = async () => {
       guild.members.cache.get(customer.discordUserId) ||
       null;
 
-    // ====== AKTÍV / LIFETIME ======
-    if (activeSubscriptions.length > 0 || hasLifetime) {
-      console.log(`${customer.email} has active subscriptions${hasLifetime ? " (lifetime)" : ""}.`);
+    // ====== DÖNTÉS: aktív-e? ======
+    const isActive = activeSubscriptions.length > 0 || hasLifetime;
 
+    if (isActive) {
+      // 1) AZONNALI VÉGÁLLAPOT BEÁLLÍTÁS (roles.set) → fizetős (+lifetime), Unknown LE
+      await applyMembershipState(client, customer.discordUserId, "active", {
+        reason: "daily-check: active",
+        assignLifetime: hasLifetime,
+      });
+
+      // 2) DB state szinkron + reminder számláló nullázás
       if (!customer.hadActiveSubscription || customer.firstReminderSentDayCount !== null) {
         await Postgres.getRepository(DiscordCustomer).update(customer.id, {
           hadActiveSubscription: true,
@@ -112,20 +117,20 @@ export const run = async () => {
         });
       }
 
-      // ⬇⬇⬇ EDDIG: kézzel add/remove. HELYETTE: roleManager-rel végállapot.
-      await applyMembershipState(client, customer.discordUserId, "active", {
-        reason: "daily-check: active",
-        assignLifetime: hasLifetime, // ha life-time jogosultsága van, maradjon is rajta
-      });
-
-      continue;
+      continue; // kész ezzel a userrel
     }
 
     // ====== NEM AKTÍV ======
-    // nincs aktív: ha eddig sem volt aktív, nincs teendő (de ha Unknown nincs rajta, roleManager majd beállítja, ha hívnánk)
-    if (!customer.hadActiveSubscription) continue;
+    // ❗ KORÁBBI 'if (!customer.hadActiveSubscription) continue;' SORT ELTÁVOLÍTVA
+    // 1) AZONNALI TELJES WIPE (keep + Unknown vissza)
+    await applyMembershipState(client, customer.discordUserId, "inactive", {
+      reason: "daily-check: inactive (no sub, no lifetime)",
+    });
 
-    // ha NEM 'unpaid' és lejárt → azonnali értesítés + teljes visszavonás
+    // 2) Innentől az emlékeztető flow opcionális (DM-ek),
+    //    de a rangok már most helyre lettek húzva.
+
+    // ha NEM 'unpaid' és lejárt → azonnali értesítés + DB update (és fent már wipe-oltunk)
     if (!subscriptions.some((sub: any) => sub.status === "unpaid")) {
       const m =
         (await guild.members.fetch(customer.discordUserId).catch(() => null)) ||
@@ -138,6 +143,7 @@ export const run = async () => {
       continue;
     }
 
+    // Reminder 2 → 1 → 0 nap (DM), de a rangok már le vannak véve
     if (customer.firstReminderSentDayCount === null) {
       console.log(`[Daily Check] Sending first reminder to ${customer.email}`);
       if (member) member.send({ embeds: [getExpiredEmbed(2)] }).catch(() => {});
