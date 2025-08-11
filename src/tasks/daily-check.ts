@@ -35,8 +35,8 @@ const getExpiredEmbed = (daysLeft: 0 | 1 | 2): EmbedBuilder => {
 /**
  * 1) DB-ben inaktivál
  * 2) emlékeztető számlálót nulláz
- * 3) role-ok: fizetős/lifetime le, „ismeretlen” fel (ha van)
- * 4) log csatornára üzen
+ * 3) MINDEN role le (@everyone kivétel + opcionális kivételek), „ismeretlen” fel (ha van)
+ * 4) logol
  */
 const makeMemberExpire = async (customer: DiscordCustomer, member: GuildMember | null, guild: Guild) => {
   await Postgres.getRepository(DiscordCustomer).update(customer.id, {
@@ -44,22 +44,34 @@ const makeMemberExpire = async (customer: DiscordCustomer, member: GuildMember |
     firstReminderSentDayCount: null,
   });
 
-  const payingRoleId = process.env.DISCORD_ROLE_ID || process.env.PAYING_ROLE_ID;
-  const lifetimeRoleId = process.env.LIFETIME_PAYING_ROLE_ID;
-  const unknownRoleId = process.env.UNKNOWN_ROLE_ID;
+  if (member) {
+    const unknownRoleId = process.env.UNKNOWN_ROLE_ID;
 
-  try {
-    if (member && payingRoleId && member.roles.cache.has(payingRoleId)) {
-      await member.roles.remove(payingRoleId).catch(() => {});
+    // ha vannak olyan role-ok, amiket SOHA ne vegyen le (pl. admin/mod), add ide:
+    const KEEP_ROLE_IDS = new Set<string>([
+      // pl.: process.env.ADMIN_ROLE_ID || "",
+      // hagyd üresen, ha nincs kivétel
+    ]);
+
+    // @everyone role ID = a guild ID-ja
+    const everyoneId = guild.id;
+
+    // mindent leveszünk, kivéve @everyone + KEEP_ROLE_IDS (+ opcionálisan az unknown-t, amit majd visszaadunk)
+    const rolesToRemove = member.roles.cache.filter((r) => {
+      if (r.id === everyoneId) return false;
+      if (KEEP_ROLE_IDS.has(r.id)) return false;
+      return true;
+    });
+
+    try {
+      // bulk remove (promise-okra szétbontva, hogy hibánál ne álljon meg)
+      await Promise.all(rolesToRemove.map((r) => member.roles.remove(r.id).catch(() => {})));
+      if (unknownRoleId) {
+        await member.roles.add(unknownRoleId).catch(() => {});
+      }
+    } catch (e) {
+      console.error("[daily-check] bulk role revoke failed:", e);
     }
-    if (member && lifetimeRoleId && member.roles.cache.has(lifetimeRoleId)) {
-      await member.roles.remove(lifetimeRoleId).catch(() => {});
-    }
-    if (member && unknownRoleId) {
-      await member.roles.add(unknownRoleId).catch(() => {});
-    }
-  } catch (e) {
-    console.error("[daily-check] role revoke failed:", e);
   }
 
   const logChannelId = process.env.LOGS_CHANNEL_ID;
@@ -68,7 +80,7 @@ const makeMemberExpire = async (customer: DiscordCustomer, member: GuildMember |
     logChannel.send(
       `:arrow_lower_right: **${member?.user?.tag || "Unknown#0000"}** (${customer.discordUserId}, <@${
         customer.discordUserId
-      }>) has completely lost access. Customer email is \`${customer.email}\`.`
+      }>) lost all roles (except kept ones). Unknown reapplied. Email: \`${customer.email}\`.`
     );
   }
 };
@@ -128,6 +140,7 @@ export const run = async () => {
         try {
           if (payingRoleId) await member.roles.add(payingRoleId).catch(() => {});
           if (hasLifetime && lifetimeRoleId) await member.roles.add(lifetimeRoleId).catch(() => {});
+          // ha van „ismeretlen” role és rajta van, vedd le
           if (unknownRoleId && member.roles.cache.has(unknownRoleId)) {
             await member.roles.remove(unknownRoleId).catch(() => {});
           }
@@ -141,7 +154,7 @@ export const run = async () => {
     // nincs aktív: ha eddig sem volt aktív, nincs teendő
     if (!customer.hadActiveSubscription) continue;
 
-    // ha NEM 'unpaid' és lejárt → azonnali értesítés + visszavonás
+    // ha NEM 'unpaid' és lejárt → azonnali értesítés + teljes visszavonás
     if (!subscriptions.some((sub: any) => sub.status === "unpaid")) {
       const m =
         (await guild.members.fetch(customer.discordUserId).catch(() => null)) ||
