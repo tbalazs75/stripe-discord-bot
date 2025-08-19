@@ -121,14 +121,23 @@ export const run = async () => {
     }
 
     // ====== NEM AKTÍV ======
-    // ❗ KORÁBBI 'if (!customer.hadActiveSubscription) continue;' SORT ELTÁVOLÍTVA
-    // 1) AZONNALI TELJES WIPE (keep + Unknown vissza)
+
+    // 1) AZONNALI TELJES WIPE (keep + Unknown vissza) – idempotens
     await applyMembershipState(client, customer.discordUserId, "inactive", {
       reason: "daily-check: inactive (no sub, no lifetime)",
     });
 
-    // 2) Innentől az emlékeztető flow opcionális (DM-ek),
-    //    de a rangok már most helyre lettek húzva.
+    // 2) Ha már korábban is inaktív volt és nincs függő emlékeztető,
+    //    NE küldjünk újabb logot/DM-et minden nap.
+    const alreadyInactiveAndNoReminders =
+      !customer.hadActiveSubscription &&
+      (customer.firstReminderSentDayCount === null || customer.firstReminderSentDayCount === undefined);
+
+    if (alreadyInactiveAndNoReminders) {
+      continue; // végállapot rendben, nincs további teendő
+    }
+
+    // 3) Innentől az emlékeztető/lejárás folyamat (egyszeri logok/DM-ek)
 
     // ha NEM 'unpaid' és lejárt → azonnali értesítés + DB update (és fent már wipe-oltunk)
     if (!subscriptions.some((sub: any) => sub.status === "unpaid")) {
@@ -139,7 +148,7 @@ export const run = async () => {
 
       console.log(`[Daily Check] Unpaid ${customer.email}`);
       if (m) m.send({ embeds: [getExpiredEmbed(0)] }).catch(() => {});
-      await makeMemberExpire(customer, m, guild);
+      await makeMemberExpire(customer, m, guild); // ez logol egyszer
       continue;
     }
 
@@ -165,7 +174,7 @@ export const run = async () => {
         guild.members.cache.get(customer.discordUserId) ||
         null;
       if (m) m.send({ embeds: [getExpiredEmbed(0)] }).catch(() => {});
-      await makeMemberExpire(customer, m, guild);
+      await makeMemberExpire(customer, m, guild); // egyszer logol
       continue;
     }
   }
