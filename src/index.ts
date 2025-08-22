@@ -134,7 +134,7 @@ app.get("/thanks", (req, res) => {
 <body>
   <h1>Az átjáró megnyílt! 🎉</h1>
   <p>Most már beléphetsz a Tányéros Coaching közösségbe:</p>
-  <a href="https://discord.gg/SEdAQcja" class="button" target="_blank">
+  <a href="https://discord.gg/AeR5KWHvqZ" class="button" target="_blank">
     👉 Csatlakozom a Tanítványokhoz!
   </a>
 </body>
